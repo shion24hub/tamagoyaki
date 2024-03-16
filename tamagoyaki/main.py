@@ -19,17 +19,13 @@ logger.add(f"{WORKING_DIR}/logs/tamagoyaki.log", level="INFO", format="{time} {l
 app = typer.Typer()
 
 
-@app.callback(help="A CLI tool for managing the crypto candlestick data.")
+@app.callback(help="🍳 A CLI tool for managing the crypto candlestick data.")
 def callback() -> None:
     """ callback
     initialize the working directory.
     """
 
-    print("This is tamagoyaki🍳")
-    print("Can you hear me?")
-
     os.makedirs(WORKING_DIR, exist_ok=True)
-
 
 @app.command(help="update the database.")
 def update(
