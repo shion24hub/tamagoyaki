@@ -27,6 +27,7 @@ def callback() -> None:
 
     os.makedirs(WORKING_DIR, exist_ok=True)
 
+
 @app.command(help="update the database.")
 def update(
     symbol: str = typer.Argument(help="The symbol to download"),
