@@ -10,7 +10,9 @@ class Candle(Base):
 
     id = Column(Integer, primary_key=True)
 
-    dt = Column(DateTime)
+    exchange = Column(String)
+    symbol = Column(String)
+    datetime = Column(DateTime)
     open = Column(String)
     high = Column(String)
     low = Column(String)
@@ -19,9 +21,8 @@ class Candle(Base):
     buy_volume = Column(String)
     sell_volume = Column(String)
 
-    def __repr__(self):
-        return f"<Candle(dt={self.dt}, open={self.open}, high={self.high}, low={self.low}, close={self.close}, volume={self.volume}, buy_volume={self.buy_volume}, sell_volume={self.sell_volume})>"
-
+    def __repr__(self) -> str:
+        return f"<Candle(exchange={self.exchange}, symbol={self.symbol}, datetime={self.datetime}, open={self.open}, high={self.high}, low={self.low}, close={self.close}, volume={self.volume}, buy_volume={self.buy_volume}, sell_volume={self.sell_volume})>"
 
 class Database:
 

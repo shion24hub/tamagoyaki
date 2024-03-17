@@ -9,14 +9,59 @@ import requests
 import typer
 from database import Candle, Database
 from loguru import logger
-from rich import print
+import numpy as np
+import pandas as pd
 
 # const
-WORKING_DIR = f"{Path.home()}/.tamagoyaki_db"
+WORKING_DIR = f"{Path.home()}/.tamagoyaki"
 
 logger.remove()
 logger.add(f"{WORKING_DIR}/logs/tamagoyaki.log", level="INFO", format="{time} {level} {message}")
 app = typer.Typer()
+
+
+def convert_to_candle(df: pd.DataFrame, interval: str):
+    """
+    convert trading data to ohlcv data.
+    required columns of df: ['datetime', 'side', 'size', 'price']
+
+    df:
+    - datetime(pd.datetime64[ns]): timestamp of the trade
+    - side(str): 'Buy' or 'Sell'
+    - size(float): size of the trade
+    - price(float): price of the trade
+    """
+
+    df = df[["datetime", "side", "size", "price"]]
+
+    df.loc[:, ["buySize"]] = np.where(df["side"] == "Buy", df["size"], 0)
+    df.loc[:, ["sellSize"]] = np.where(df["side"] == "Sell", df["size"], 0)
+    df.loc[:, ["datetime"]] = df["datetime"].dt.floor(interval)
+
+    df = df.groupby("datetime").agg(
+        {
+            "price": ["first", "max", "min", "last"],
+            "size": "sum",
+            "buySize": "sum",
+            "sellSize": "sum",
+        }
+    )
+
+    # multiindex to single index
+    df.columns = ["_".join(col) for col in df.columns]
+    df = df.rename(
+        columns={
+            "price_first": "open",
+            "price_max": "high",
+            "price_min": "low",
+            "price_last": "close",
+            "size_sum": "volume",
+            "buySize_sum": "buyVolume",
+            "sellSize_sum": "sellVolume",
+        }
+    )
+
+    return df
 
 
 @app.callback(help="🍳 A CLI tool for managing the crypto candlestick data.")
@@ -33,10 +78,11 @@ def update(
     symbol: str = typer.Argument(help="The symbol to download"),
     begin: str = typer.Argument(help="The begin date (YYYYMMDD)"),
     end: str = typer.Argument(help="The end date (YYYYMMDD)"),
-    interval_sec: int = typer.Argument(60, help="The interval of the candlestick in seconds. (default: 60)"),
 ) -> None:
     """ update
-    
+
+    update the database of 1-second candlestick data.
+
     """
     
     # validate the date format
@@ -48,12 +94,11 @@ def update(
         raise typer.BadParameter(err)
     
     # main process
-    db = Database(f"sqlite:///{WORKING_DIR}/{symbol}.db")
+    db = Database(f"sqlite:///{WORKING_DIR}/candle.db")
 
     date_range = [bdt + datetime.timedelta(days=i) for i in range((edt - bdt).days + 1)]
-    for date in date_range:
 
-        print("DEBUG: download -> {}".format(date.strftime("%Y-%m-%d")))
+    for date in date_range:
         
         # make url
         base_url = "https://public.bybit.com/trading/"
@@ -69,58 +114,55 @@ def update(
         # data processing
         candles: list[Candle] = []
         with gzip.open(BytesIO(resp.content), "rt") as f:
-            reader = csv.reader(f)
-            next(reader)
 
-            pdt = None
-            op, hi, lo, cl, vol, bvol, svol = .0, .0, .0, .0, .0, .0, .0
-            for row in reader:
+            df = pd.read_csv(f)
 
-                dt = datetime.datetime.fromtimestamp(float(row[0]), datetime.timezone.utc)
-                truncated_dt = dt - datetime.timedelta(seconds=dt.second % interval_sec, microseconds=dt.microsecond)
+            # setting
+            df = df[["timestamp", "side", "size", "price"]]
+            df.loc[:, ["datetime"]] = pd.to_datetime(df["timestamp"], unit="s")
+            df.loc[:, ["buySize"]] = np.where(df["side"] == "Buy", df["size"], 0)
+            df.loc[:, ["sellSize"]] = np.where(df["side"] == "Sell", df["size"], 0)
+            df.loc[:, ["datetime"]] = df["datetime"].dt.floor("1s")
 
-                # update the variables
-                if truncated_dt != pdt:
+            # groupby 
+            df = df.groupby("datetime").agg(
+                {
+                    "price": ["first", "max", "min", "last"],
+                    "size": "sum",
+                    "buySize": "sum",
+                    "sellSize": "sum",
+                }
+            )
 
-                    candles.append(Candle(
-                        dt=truncated_dt,
-                        open=op,
-                        high=hi,
-                        low=lo,
-                        close=cl,
-                        volume=vol,
-                        buy_volume=bvol,
-                        sell_volume=svol
-                    ))
+            # multiindex to single index
+            df.columns = ["_".join(col) for col in df.columns]
+            df = df.rename(
+                columns={
+                    "price_first": "open",
+                    "price_max": "high",
+                    "price_min": "low",
+                    "price_last": "close",
+                    "size_sum": "volume",
+                    "buySize_sum": "buyVolume",
+                    "sellSize_sum": "sellVolume",
+                }
+            )
 
-                    pdt = truncated_dt
-                    op = float(row[4])
-                    hi = float(row[4])
-                    lo = float(row[4])
-                    cl = float(row[4])
-                    vol = float(row[3])
-                    bvol = float(row[3]) if row[2] == "Buy" else .0
-                    svol = float(row[3]) if row[2] == "Sell" else .0
-
-                    continue
-                
-                hi = max(hi, float(row[4]))
-                lo = min(lo, float(row[4]))
-                cl = float(row[4])
-                vol += float(row[3])
-                bvol += float(row[3]) if row[2] == "Buy" else .0
-                svol += float(row[3]) if row[2] == "Sell" else .0
-
-            candles.append(Candle(
-                dt=pdt,
-                open=op,
-                high=hi,
-                low=lo,
-                close=cl,
-                volume=vol,
-                buy_volume=bvol,
-                sell_volume=svol
-            ))
+            # make Candle object
+            for index, row in df.iterrows():
+                candle = Candle(
+                    exchange="bybit",
+                    symbol=symbol,
+                    datetime=index,
+                    open=row["open"],
+                    high=row["high"],
+                    low=row["low"],
+                    close=row["close"],
+                    volume=row["volume"],
+                    buy_volume=row["buyVolume"],
+                    sell_volume=row["sellVolume"],
+                )
+                candles.append(candle)
         
         # insert
         db.session.add_all(candles)
