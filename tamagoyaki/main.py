@@ -20,50 +20,6 @@ logger.add(f"{WORKING_DIR}/logs/tamagoyaki.log", level="INFO", format="{time} {l
 app = typer.Typer()
 
 
-def convert_to_candle(df: pd.DataFrame, interval: str):
-    """
-    convert trading data to ohlcv data.
-    required columns of df: ['datetime', 'side', 'size', 'price']
-
-    df:
-    - datetime(pd.datetime64[ns]): timestamp of the trade
-    - side(str): 'Buy' or 'Sell'
-    - size(float): size of the trade
-    - price(float): price of the trade
-    """
-
-    df = df[["datetime", "side", "size", "price"]]
-
-    df.loc[:, ["buySize"]] = np.where(df["side"] == "Buy", df["size"], 0)
-    df.loc[:, ["sellSize"]] = np.where(df["side"] == "Sell", df["size"], 0)
-    df.loc[:, ["datetime"]] = df["datetime"].dt.floor(interval)
-
-    df = df.groupby("datetime").agg(
-        {
-            "price": ["first", "max", "min", "last"],
-            "size": "sum",
-            "buySize": "sum",
-            "sellSize": "sum",
-        }
-    )
-
-    # multiindex to single index
-    df.columns = ["_".join(col) for col in df.columns]
-    df = df.rename(
-        columns={
-            "price_first": "open",
-            "price_max": "high",
-            "price_min": "low",
-            "price_last": "close",
-            "size_sum": "volume",
-            "buySize_sum": "buyVolume",
-            "sellSize_sum": "sellVolume",
-        }
-    )
-
-    return df
-
-
 @app.callback(help="🍳 A CLI tool for managing the crypto candlestick data.")
 def callback() -> None:
     """ callback
