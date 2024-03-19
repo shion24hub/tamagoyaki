@@ -1,16 +1,15 @@
-import csv
 import datetime
 import gzip
 import os
 from io import BytesIO
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import requests
 import typer
 from database import Candle, Database
 from loguru import logger
-import numpy as np
-import pandas as pd
 
 # const
 WORKING_DIR = f"{Path.home()}/.tamagoyaki"
