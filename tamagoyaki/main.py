@@ -136,12 +136,71 @@ def update(
 
 
 @app.command()
-def generate() -> None:
+def generate(
+    symbol: str = typer.Argument(help="The symbol to download"),
+    begin: str = typer.Argument(help="The begin date (YYYYMMDD)"),
+    end: str = typer.Argument(help="The end date (YYYYMMDD)"),
+    interval: int = typer.Argument(help="The interval in seconds"),
+    output_dir: str = typer.Option("./", help="The output directory"),
+    # no_zip: bool = typer.Option(False, help="Do not compress the output"),
+) -> None:
     """ generate
+
+    generate the database of 1-second candlestick data.
 
     """
 
-    pass
+    # validate the date format
+    try:
+        bdt = datetime.datetime.strptime(begin, "%Y%m%d")
+        edt = datetime.datetime.strptime(end, "%Y%m%d")
+    except ValueError:
+        err = "Invalid date format. Please use YYYYMMDD."
+        raise typer.BadParameter(err)
+    
+    # main process
+    db = Database(f"sqlite:///{WORKING_DIR}/candle.db")
+
+    query = db.session.query(Candle)
+    query = query.filter(Candle.exchange == "bybit")
+    query = query.filter(Candle.symbol == symbol)
+    query = query.filter(Candle.datetime >= bdt)
+    query = query.filter(Candle.datetime <= edt)
+
+    df = pd.read_sql(query.statement, query.session.bind)
+    # convert its types
+    df["datetime"] = pd.to_datetime(df["datetime"])
+    df["open"] = df["open"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
+    df["close"] = df["close"].astype(float)
+    df["volume"] = df["volume"].astype(float)
+    df["buy_volume"] = df["buy_volume"].astype(float)
+    df["sell_volume"] = df["sell_volume"].astype(float)
+
+    # resample
+    df = df.set_index("datetime")
+    df = df.resample(f"{interval}s").agg(
+        {
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+            "buy_volume": "sum",
+            "sell_volume": "sum",
+        }
+    )
+
+    # dropna
+    df = df.dropna()
+
+    # output
+    os.makedirs(output_dir, exist_ok=True)
+    filename = f"{symbol}_{begin}_{end}_{interval}.csv"
+    output_path = os.path.join(output_dir, filename)
+
+    df.to_csv(output_path)
 
 
 if __name__ == "__main__":
