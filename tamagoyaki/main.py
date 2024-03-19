@@ -55,6 +55,16 @@ def update(
     date_range = [bdt + datetime.timedelta(days=i) for i in range((edt - bdt).days + 1)]
 
     for date in date_range:
+        logger.info(f"Downloading {symbol}{date.strftime('%Y-%m-%d')}")
+
+        # check if the data already exists
+        query = db.session.query(Candle)
+        query = query.filter(Candle.exchange == "bybit")
+        query = query.filter(Candle.symbol == symbol)
+
+        if query.filter(Candle.datetime == date).count() > 0:
+            logger.info(f"{symbol}{date.strftime('%Y-%m-%d')} already exists.")
+            continue
         
         # make url
         base_url = "https://public.bybit.com/trading/"

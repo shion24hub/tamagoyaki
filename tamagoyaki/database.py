@@ -1,5 +1,5 @@
 from sqlalchemy import Column, DateTime, Integer, String, create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 Base = declarative_base()
 
@@ -23,7 +23,8 @@ class Candle(Base):
 
     def __repr__(self) -> str:
         return f"<Candle(exchange={self.exchange}, symbol={self.symbol}, datetime={self.datetime}, open={self.open}, high={self.high}, low={self.low}, close={self.close}, volume={self.volume}, buy_volume={self.buy_volume}, sell_volume={self.sell_volume})>"
-
+    
+    
 class Database:
 
     def __init__(self, url: str) -> None:
