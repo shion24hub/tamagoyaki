@@ -1,6 +1,3 @@
-# 🚧 Now Cooking! 🚧
-Because of the personal use of the development, destructive changes are often made. Be careful when tasting!
-
 # Simple Example
 
 To add 60-second candlestick data to the BTCUSDT database for January 1-3, 2024
